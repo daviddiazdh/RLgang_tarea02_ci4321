@@ -1,0 +1,669 @@
+// Rotating cube, FixedFunction (FF) version.
+import './style.css';
+import { mat3, mat4, vec3 } from 'gl-matrix';
+import { ATTRIB, createFixedFunction, LIGHTING } from './vendor/ff/ff';
+import {
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  CLEAR_COLOR,
+  COLORS,
+  CUBE_INDICES,
+  CUBE_VERTICES,
+  SPHERE_INDICES,
+  SPHERE_VERTICES,
+  CYLINDER_VERTICES,
+  CYLINDER_INDICES,
+  ARROW_VERTICES,
+  ARROW_INDICES,
+  ZACARIAS_RUSSIAN_TANK_TRACK_VERTICES,
+  ZACARIAS_RUSSIAN_TANK_TRACK_INDICES,
+  NORMAL_OFFSET_BYTES,
+  STRIDE_BYTES,
+} from './constants';
+import { TreeNode } from './treenode';
+
+
+type FF = ReturnType<typeof createFixedFunction>;
+
+const ROTATION_SPEED = 0.8; 
+const MAX_DT = 0.1; // seconds
+
+// Step 1. Get the WebGL2 context.
+function getContext(canvas: HTMLCanvasElement): WebGL2RenderingContext {
+  const gl = canvas.getContext('webgl2');
+  if (!gl) throw new Error('WebGL2 is not available.');
+  return gl;
+}
+
+// Step 2. Shaders and program: FF creates and owns them.
+// Step 3. Vertex specification: copy the vertex and index data to the GPU.
+function createVertexBuffer(gl: WebGL2RenderingContext, data: Float32Array): WebGLBuffer {
+  const buffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  return buffer;
+}
+
+function createIndexBuffer(gl: WebGL2RenderingContext, data: Uint16Array): WebGLBuffer {
+  const buffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  return buffer;
+}
+
+// Step 4. Describe how the vertex data is laid out, using FF's attribute slots.
+// No ATTRIB.COLOR: lit colors come from the material.
+function createVAO(gl: WebGL2RenderingContext, vertices: WebGLBuffer, indices: WebGLBuffer): WebGLVertexArrayObject {
+  const vao = gl.createVertexArray()!;
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
+  gl.enableVertexAttribArray(ATTRIB.POSITION);
+  gl.vertexAttribPointer(ATTRIB.POSITION, 3, gl.FLOAT, false, STRIDE_BYTES, 0);
+  gl.enableVertexAttribArray(ATTRIB.NORMAL);
+  gl.vertexAttribPointer(ATTRIB.NORMAL, 3, gl.FLOAT, false, STRIDE_BYTES, NORMAL_OFFSET_BYTES);
+  // The VAO remembers the ELEMENT_ARRAY_BUFFER bound while it is bound.
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+  gl.bindVertexArray(null);
+  return vao;
+}
+
+// Step 5. Pipeline state: canvas size, viewport, clear color, depth test, face culling.
+function setupState(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement): void {
+  canvas.width = CANVAS_WIDTH;
+  canvas.height = CANVAS_HEIGHT;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(...CLEAR_COLOR);
+  gl.enable(gl.DEPTH_TEST); // new vs. the triangle: nearer faces must hide farther ones
+  // gl.enable(gl.CULL_FACE); // skip back faces; front faces are counter-clockwise (the default)
+}
+
+// Step 6. Scene: lighting, one directional light, camera.
+function setupScene(ff: FF): void {
+  ff.enable(LIGHTING);
+  ff.setGlobalAmbient([0.2, 0.2, 0.2, 1]); // the FF default, set explicitly to make it visible
+
+  // The light TRAVELS in direction (-1, -1, -0.5): down, left, slightly away from the camera.
+  // FF's position (w = 0) points TOWARD the light, so the sign flips: (1, 1, 0.5, 0).
+  // Passing the travel direction instead lights the faces that point away from the light.
+  ff.setLight(0, { position: [1, 1, 0.5, 0], diffuse: [1, 1, 1, 1] });
+  ff.enableLight(0);
+
+  const view = mat4.lookAt(mat4.create(), [0, 2, 8], [0, 0, 0], [0, 1, 0]);
+  ff.setViewMatrix(view);
+  // Aspect = width / height of the drawing buffer (4:3). A wrong aspect stretches the cube.
+  const projection = mat4.perspective(mat4.create(), Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.1, 100);
+  ff.setProjectionMatrix(projection);
+}
+
+// -----------------------------------------------------------------------
+// Model definition
+//
+//
+//
+//
+// -----------------------------------------------------------------------
+
+const POWER_LEVEL_ON  : readonly [number, number, number, number] = [1, 31 / 255, 31 / 255, 1];
+const POWER_LEVEL_OFF : readonly [number, number, number, number] = [155 / 255, 53 / 255, 53 / 255, 1];
+
+const root = new TreeNode('root', 'concept', {scale : [0.6,0.6,0.6], rotation : [0, 0, 0], translation : [0,-1,-2]});
+
+const floor = root.addChild('floor', 'object', { color: [0.90, 0.90, 0.90, 1],
+  dimensions: [24, 0.2, 48], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.2,0], position: [0,0,0]}, 
+  "CUBE");
+
+const tank = root.addChild('tank', 'concept', {scale : [1,1,1], rotation : [0, 0, 0], translation : [-5,0.5,2]});
+
+const tank_body = tank.addChild('tank_body', 'concept', {scale : [1,1,1], rotation : [0,0,0], translation : [0,0,0]});
+
+tank_body.addChild('tank_body_cube', 'object', { color: [0.1, 0.1, 0.1, 1],
+  dimensions: [1, 0.7, 1], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]}, 
+  "CUBE");
+
+const tank_body_arrow_0 = tank_body.addChild('tank_body_arrow_0', 'object', { color: POWER_LEVEL_ON,
+  dimensions: [0.5, 0.5, 0.5], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.20,0.55], position: [0,0,0]}, 
+  "ARROW");
+
+const tank_body_arrow_1 = tank_body.addChild('tank_body_arrow_1', 'object', { color: POWER_LEVEL_OFF,
+  dimensions: [0.5, 0.5, 0.5], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.02,0.55], position: [0,0,0]}, 
+  "ARROW");
+
+const tank_body_arrow_2 = tank_body.addChild('tank_body_arrow_2', 'object', { color: POWER_LEVEL_OFF,
+  dimensions: [0.5, 0.5, 0.5], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0.16,0.55], position: [0,0,0]}, 
+  "ARROW");
+
+tank_body.addChild('zacarias_russian_left_track', 'object', { color: [0.3, 0.3, 0.3, 1],
+  dimensions: [0.2, 0.6, 0.6], rotation: [Math.PI / 2, 0, Math.PI], scale: [1, 1, 1], translation: [-0.65,-0.15,0], position: [0,0,0]}, 
+  "ZACARIAS_RUSSIAN_TANK_TRACK");
+
+tank_body.addChild('zacarias_russian_right_track', 'object', { color: [0.3, 0.3, 0.3, 1],
+  dimensions: [0.2, 0.6, 0.6], rotation: [Math.PI / 2, 0, Math.PI], scale: [1, 1, 1], translation: [0.65,-0.15,0], position: [0,0,0]}, 
+  "ZACARIAS_RUSSIAN_TANK_TRACK");
+
+
+const tank_turret = tank.addChild('tank_turret', 'concept', {scale : [1,1,1], rotation : [- Math.PI / 4,0,0], translation : [0,0.40,0], position: [0,0,0]});
+
+const cannon_turret = tank_turret.addChild('cannon_turret', 'object', { color: [59 / 255, 66 / 255, 33 / 255, 1],
+  dimensions: [0.35, 0.35, 0.35], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]}, 
+  "SPHERE");
+
+const cannon = cannon_turret.addChild('cannon', 'object', { color: [59 / 255, 66 / 255, 33 / 255, 1],
+  dimensions: [0.10, 1, 0.10], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,cannon_turret.data.dimensions[1] * 2,0], position: [0,0,0]}, 
+  "CYLINDER");
+
+const cannon_ball = cannon.addChild('cannon_ball', 'object', { color : [0.15,0.15,0.15,1], 
+  dimensions: [0.15, 0.15, 0.15], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0, cannon.data.dimensions[1] / 2,0], position: [0,0,0]},
+  "SPHERE");
+
+
+
+const alien1 = root.addChild('alien1', 'concept', {scale : [0.7,0.7,0.7], rotation : [0, 0, 0], translation : [0,3,-4]}, "", false)
+const head_alien1 = alien1.addChild(
+  'head_alien1', 'object', { color : [0,0.8,0,1], 
+  dimensions: [0.8, 0.8, 0.8], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]},
+  "SPHERE"
+)
+const left_eye_alien1 = alien1.addChild(
+  'left_eye_alien1', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, Math.PI / 4], scale: [1, 1, 1], translation: [-0.35,0.35,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+const right_eye_alien1 = alien1.addChild(
+  'right_eye_alien1', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, -Math.PI / 4], scale: [1, 1, 1], translation: [0.35,0.35,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+const mouth_alien1 = alien1.addChild(
+  'mouth_alien1', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.1, 0.2], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.2,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+
+
+const alien2 = root.addChild('alien2', 'concept', {scale : [0.7,0.7,0.7], rotation : [0, 0, 0], translation : [3,4,-2.5]}, "", false)
+const head_alien2 = alien2.addChild(
+  'head_alien2', 'object', { color : [0,0.8,0,1], 
+  dimensions: [0.8, 0.8, 0.8], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]},
+  "SPHERE"
+)
+const left_eye_alien2 = alien2.addChild(
+  'left_eye_alien2', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, Math.PI / 4], scale: [1, 1, 1], translation: [-0.35,0.35,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+const right_eye_alien2 = alien2.addChild(
+  'right_eye_alien2', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, -Math.PI / 4], scale: [1, 1, 1], translation: [0.35,0.35,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+const mouth_alien2 = alien2.addChild(
+  'mouth_alien2', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.1, 0.2], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.2,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+
+
+
+
+const alien3 = root.addChild('alien3', 'concept', {scale : [0.7,0.7,0.7], rotation : [0, 0, 0], translation : [-2,2.5,-3]}, "", false)
+const head_alien3 = alien3.addChild(
+  'head_alien3', 'object', { color : [0,0.8,0,1], 
+  dimensions: [0.8, 0.8, 0.8], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]},
+  "SPHERE"
+)
+const left_eye_alien3 = alien3.addChild(
+  'left_eye_alien3', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, Math.PI / 4], scale: [1, 1, 1], translation: [-0.35,0.35,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+const right_eye_alien3 = alien3.addChild(
+  'right_eye_alien3', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, -Math.PI / 4], scale: [1, 1, 1], translation: [0.35,0.35,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+const mouth_alien3 = alien3.addChild(
+  'mouth_alien3', 'object', { color : [0,0,0,1], 
+  dimensions: [0.2, 0.1, 0.2], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.2,0.8], position: [0,0,0]},
+  "SPHERE"
+)
+
+
+
+
+
+
+
+// ---------------------------------------------------------------------------
+// Game loop. Every frame does three separate phases:
+//   1. processInput: read what the user did.
+//   2. update(dt): advance the simulation by the elapsed time dt.
+//   3. render: draw the current state.
+// Keep the phases apart: render never changes the state, and update never calls WebGL.
+// ---------------------------------------------------------------------------
+const POWER_LEVEL_STATES = [[true, false, false], [true, true, false], [true, true, true]];
+const CAMERA_ANGLES = [Math.PI / 4, - Math.PI / 4, 0, Math.PI]
+const G = 10;
+
+
+// Game state: everything the simulation needs, nothing about WebGL.
+const state = { angle: 0, colorIndex: 0, rotating: true, moving_x: false, moving_mx: false, 
+                tank_x_position: 0, power_state: [true,false,false],
+                power_level: 0, rotating_cannon_y: false, rotating_cannon_my : false,
+                camera_index: 0, cannon_angle: Math.PI / 4, shoot_angle: 0, proyectile_velocity: 7,
+                proyectile_velocity_z: 0, proyectile_velocity_y : 0, 
+                just_shot: false, proyectile_shot: false, proyectile_z: 0, proyectile_y: 0, 
+                fire_power_index : 0, fire_powers : [7, 10, 15]};
+
+const keysDown = new Set<string>();
+const keysLastFrame = new Set<string>();
+
+function setupInput(): void {
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') e.preventDefault();
+    keysDown.add(e.code);
+  });
+
+  window.addEventListener('keyup', (e) => {
+    keysDown.delete(e.code);
+  });
+}
+
+function isJustPressed(code: string): boolean {
+  return keysDown.has(code) && !keysLastFrame.has(code);
+}
+
+function isHeld(code: string): boolean {
+  return keysDown.has(code);
+}
+
+
+function processInput(): void {
+  if (isJustPressed('Space') && !state.proyectile_shot) {
+    state.just_shot = true;
+    state.proyectile_shot = true;  
+  }
+
+  if (isJustPressed('Digit1')){
+    state.power_state = POWER_LEVEL_STATES[0];
+    state.fire_power_index = 0;
+  }
+
+  if (isJustPressed('Digit2')){
+    state.power_state = POWER_LEVEL_STATES[1];
+    state.fire_power_index = 1;
+  }
+
+  if (isJustPressed('Digit3')){
+    state.power_state = POWER_LEVEL_STATES[2];
+    state.fire_power_index = 2;
+  }
+
+  if(isJustPressed('KeyF')){
+    state.power_level = (state.power_level + 1) % 3;
+    state.fire_power_index = (state.fire_power_index + 1) % 3;
+    state.power_state = POWER_LEVEL_STATES[state.power_level];
+  }
+
+  if(isJustPressed('KeyC')){
+    state.camera_index = (state.camera_index + 1) % 4;
+    root.data.rotation[1] = CAMERA_ANGLES[state.camera_index];
+  }
+
+  const heads_concept = [alien1, alien2, alien3];
+
+  if(isJustPressed('KeyR')){
+    // Restart tank position
+    tank.data.translation[0] = 0; 
+    tank_body.data.rotation[1] = 0;
+
+    // Restart proyectile state
+    state.proyectile_shot = false;
+    state.proyectile_y = 0;
+    state.proyectile_z = 0;
+
+    for(var i = 0; i < 3; i += 1){
+        heads_concept[i].disabled = false;
+    }
+
+  }
+
+  state.moving_x = isHeld('ArrowRight');
+  state.moving_mx = isHeld('ArrowLeft');
+
+  state.rotating_cannon_y = isHeld('ArrowUp');
+  state.rotating_cannon_my = isHeld('ArrowDown');
+
+
+  keysLastFrame.clear();
+  keysDown.forEach((key) => keysLastFrame.add(key));
+}
+
+// Loop phase 2. 
+function update(dt: number): void {
+  if (state.rotating) state.angle += ROTATION_SPEED * dt; // paused: the angle keeps its value
+  if (state.moving_x) state.tank_x_position += 1.5 * dt;
+  if (state.moving_mx) state.tank_x_position -= 1.5 * dt;
+
+  tank_body_arrow_0.data.color = (state.power_state[0] ? POWER_LEVEL_ON : POWER_LEVEL_OFF);
+  tank_body_arrow_1.data.color = (state.power_state[1] ? POWER_LEVEL_ON : POWER_LEVEL_OFF);
+  tank_body_arrow_2.data.color = (state.power_state[2] ? POWER_LEVEL_ON : POWER_LEVEL_OFF);
+
+  if(state.moving_x){
+    tank.data.translation[0] += 3 * dt; 
+    tank_body.data.rotation[1] = -Math.PI / 100;
+  }
+
+  if(state.moving_mx){
+    tank.data.translation[0] -= 3 * dt; 
+    tank_body.data.rotation[1] = Math.PI / 100;
+  }
+
+  if(state.rotating_cannon_y && - Math.PI / 2 + (5 / 180) * Math.PI <= tank_turret.data.rotation[0] && tank_turret.data.rotation[0] <= 0){
+    tank_turret.data.rotation[0] += 2 * (Math.PI * dt)
+    state.cannon_angle +=  2 * (Math.PI * dt);
+    tank_turret.data.rotation[0] = Math.min(tank_turret.data.rotation[0], 0);
+    state.cannon_angle = Math.min(state.cannon_angle, Math.PI / 2);
+  }
+
+  if(state.rotating_cannon_my && - Math.PI / 2 + (5 / 180) * Math.PI <= tank_turret.data.rotation[0] && tank_turret.data.rotation[0] <= 0){
+    tank_turret.data.rotation[0] -= 2 * (Math.PI * dt)
+    state.cannon_angle -=  2 * (Math.PI * dt);
+    tank_turret.data.rotation[0] = Math.max(tank_turret.data.rotation[0], - Math.PI / 2 + (5 / 180) * Math.PI);
+    state.cannon_angle = Math.max(state.cannon_angle, 0 + (5 / 180) * Math.PI);
+  }
+
+  if(state.just_shot){
+    state.shoot_angle = state.cannon_angle;
+    state.proyectile_velocity_y = state.fire_powers[state.fire_power_index] * Math.sin(state.shoot_angle);
+    state.proyectile_velocity_z = -state.fire_powers[state.fire_power_index] * Math.cos(state.shoot_angle);
+  }
+
+  if(!state.just_shot && state.proyectile_shot){
+
+    state.proyectile_velocity_y -= G * dt;
+
+    state.proyectile_z += state.proyectile_velocity_z * dt;
+    state.proyectile_y += state.proyectile_velocity_y * dt;
+
+    if(cannon_ball.data.position[1] - cannon_ball.data.dimensions[0] < 0){
+      state.proyectile_shot = false;
+      state.proyectile_y = 0;
+      state.proyectile_z = 0;
+    }
+
+    const heads_array = [head_alien1, head_alien2, head_alien3];
+    const heads_concept = [alien1, alien2, alien3];
+    for(var i = 0; i < 3; i += 1){
+      
+      const left_term = (cannon_ball.data.position[0] - heads_array[i].data.position[0])**2 + 
+      (cannon_ball.data.position[1] - heads_array[i].data.position[1])**2 + 
+      (cannon_ball.data.position[2] - heads_array[i].data.position[2])**2;
+
+      const right_term = (cannon_ball.data.dimensions[0] + 
+        heads_array[i].data.dimensions[0] * heads_array[i].data.scale[0]) ** 2;
+      
+      if(left_term < right_term){
+        heads_concept[i].disabled = true;
+      }
+
+    }
+
+
+    // console.log("Velocity Y: " + state.proyectile_velocity_y);
+
+  }
+
+
+
+
+
+  // console.log("Shoot Angle: " + state.shoot_angle);
+  // console.log("Cannon Angle: " + state.cannon_angle);
+  
+  // console.log("Just Shot: " + state.just_shot);
+  // console.log("Proyectile Shot: " + state.proyectile_shot);
+
+  // console.log("Coordenadas de la bola: (" + cannon_ball.data.position[0] + " " + cannon_ball.data.position[1] + " " + cannon_ball.data.position[2] + ")");
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Loop phase 3. Draw the current state. render reads the state and never changes it.
+// setMaterial runs every frame, so FF re-uploads the material each frame. That costs a few
+// uniforms and keeps render simple. Exercise: set the material only when colorIndex changes.
+const model = mat4.create();
+const normalMatrix = mat3.create();
+
+const rotation = mat4.create();
+const rotationX = mat4.create();
+const rotationY = mat4.create();
+const rotationZ = mat4.create();
+
+const scaling = mat4.create();
+const parent_scaling = mat4.create();
+const translation = mat4.create();
+
+
+var proyectile_model = mat4.create();
+
+
+function render(gl: WebGL2RenderingContext, ff: FF, 
+  cubeVao: WebGLVertexArrayObject, vao: WebGLVertexArrayObject,
+  cylinderVao : WebGLVertexArrayObject, 
+  arrowVao: WebGLVertexArrayObject, 
+  zacariasTrackVAO: WebGLVertexArrayObject): void {
+  
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  
+  var stack_scale : number[][] = [];
+  var stack_rotation : number[][] = [];
+  var stack_translation : number[][] = [];
+
+  root.traverse((node : TreeNode, depth: number, stack_scale: number[][], stack_rotation: number[][], stack_translation: number[][]) => {
+
+    const data = node.data;
+
+    if(node.type == "object"){
+
+      mat4.fromScaling(scaling, [data.dimensions[0], data.dimensions[1], data.dimensions[2]]);
+
+      // Local rotation
+      mat4.fromXRotation(rotationX, data.rotation[0]);
+      mat4.fromYRotation(rotationY, data.rotation[1]);
+      mat4.fromZRotation(rotationZ, data.rotation[2]);
+      mat4.multiply(rotation, rotationY, rotationX);
+      mat4.multiply(rotation, rotationZ, rotation);
+      mat4.multiply(model, rotation, scaling);
+
+      // Local translation
+      mat4.fromTranslation(translation, [data.translation[0], data.translation[1], data.translation[2]]);
+      mat4.multiply(model, translation, model);
+
+      const transformations_number = stack_scale.length;
+      for (let i = transformations_number - 1; i >= 0; i--) {
+        
+        // Parent scaling
+        mat4.fromScaling(parent_scaling, [stack_scale[i][0], stack_scale[i][1], stack_scale[i][2]]);
+        mat4.multiply(model, parent_scaling, model);
+
+        // Parent rotation
+        mat4.fromXRotation(rotationX, stack_rotation[i][0]);
+        mat4.fromYRotation(rotationY, stack_rotation[i][1]);
+        mat4.fromZRotation(rotationZ, stack_rotation[i][2]);
+        mat4.multiply(rotation, rotationY, rotationX);
+        mat4.multiply(rotation, rotationZ, rotation);
+        mat4.multiply(model, rotation, model);
+
+        // Parent translation
+        mat4.fromTranslation(translation, [stack_translation[i][0], stack_translation[i][1], stack_translation[i][2]]);
+        mat4.multiply(model, translation, model);
+
+        if(i == 1){
+          const origin_to_position = vec3.fromValues(0, 0, 0);
+
+          vec3.transformMat4(origin_to_position, origin_to_position, model);
+
+          node.data.position[0] = origin_to_position[0];
+          node.data.position[1] = origin_to_position[1];
+          node.data.position[2] = origin_to_position[2];
+
+        }
+
+        if(node.id == "cannon_ball" && state.just_shot && i == 1){
+          proyectile_model = mat4.clone(model);
+        }
+
+      }
+
+      // Se lanza la pelota
+      if(node.id == "cannon_ball" && state.just_shot){
+        state.just_shot = false;
+
+      } else if(node.id == "cannon_ball" && state.proyectile_shot){
+
+        mat4.fromTranslation(translation, [0, state.proyectile_y, state.proyectile_z]);
+        mat4.multiply(model, translation, proyectile_model);
+
+        const origin_to_position = vec3.fromValues(0, 0, 0);
+
+        vec3.transformMat4(origin_to_position, origin_to_position, model);
+        node.data.position[0] = origin_to_position[0];
+        node.data.position[1] = origin_to_position[1];
+        node.data.position[2] = origin_to_position[2];
+
+
+        mat4.fromScaling(parent_scaling, [stack_scale[0][0], stack_scale[0][1], stack_scale[0][2]]);
+        mat4.multiply(model, parent_scaling, model);
+
+        // Parent rotation
+        mat4.fromXRotation(rotationX, stack_rotation[0][0]);
+        mat4.fromYRotation(rotationY, stack_rotation[0][1]);
+        mat4.fromZRotation(rotationZ, stack_rotation[0][2]);
+        mat4.multiply(rotation, rotationY, rotationX);
+        mat4.multiply(rotation, rotationZ, rotation);
+        mat4.multiply(model, rotation, model);
+
+        // Parent translation
+        mat4.fromTranslation(translation, [stack_translation[0][0], stack_translation[0][1], stack_translation[0][2]]);
+        mat4.multiply(model, translation, model);
+
+      }
+
+      ff.setModelMatrix(model);
+      ff.setNormalMatrix(mat3.normalFromMat4(normalMatrix, model));
+
+      ff.setMaterial({ ambient: data.color, diffuse: data.color });
+
+      var currentVao = vao;
+      var currentIndices = SPHERE_INDICES;
+
+      switch(node.figure){
+        case "SPHERE":
+          currentVao = vao;
+          currentIndices = SPHERE_INDICES;
+          break;
+        case "CYLINDER":
+          currentVao = cylinderVao;
+          currentIndices = CYLINDER_INDICES;
+          break;
+        case "CUBE":
+          currentVao = cubeVao;
+          currentIndices = CUBE_INDICES;
+          break;
+        case "ARROW":
+          currentVao = arrowVao;
+          currentIndices = ARROW_INDICES;
+          break;
+        case "ZACARIAS_RUSSIAN_TANK_TRACK":
+          currentVao = zacariasTrackVAO;
+          currentIndices = ZACARIAS_RUSSIAN_TANK_TRACK_INDICES;
+          break;
+      }
+
+      gl.bindVertexArray(currentVao);
+      ff.drawElements(gl.TRIANGLES, currentIndices.length, gl.UNSIGNED_SHORT, 0);
+
+    }
+
+    stack_scale.push(data.scale);
+    stack_rotation.push(data.rotation);
+    stack_translation.push(data.translation);
+
+    // console.log(acc_scale);
+
+  }, 0, stack_scale, stack_rotation, stack_translation);
+
+
+}
+
+
+function run(canvas: HTMLCanvasElement): void {
+  const gl = getContext(canvas);
+  const ff = createFixedFunction(gl, { debug: true });
+
+  const cube_vertices = createVertexBuffer(gl, CUBE_VERTICES);
+  const cube_indices = createIndexBuffer(gl, CUBE_INDICES);
+  const cube_vao = createVAO(gl, cube_vertices, cube_indices);
+
+  const vertices = createVertexBuffer(gl, SPHERE_VERTICES);
+  const indices = createIndexBuffer(gl, SPHERE_INDICES);
+  const vao = createVAO(gl, vertices, indices);
+
+  const cylinder_vertices = createVertexBuffer(gl, CYLINDER_VERTICES);
+  const cylinder_indices = createIndexBuffer(gl, CYLINDER_INDICES);
+  const cylinder_vao = createVAO(gl, cylinder_vertices, cylinder_indices);
+
+  const arrow_vertices = createVertexBuffer(gl, ARROW_VERTICES);
+  const arrow_indices = createIndexBuffer(gl, ARROW_INDICES);
+  const arrow_vao = createVAO(gl, arrow_vertices, arrow_indices);
+
+  const zacarias_track_vertices = createVertexBuffer(gl, ZACARIAS_RUSSIAN_TANK_TRACK_VERTICES); 
+  const zacarias_track_indices = createIndexBuffer(gl, ZACARIAS_RUSSIAN_TANK_TRACK_INDICES); 
+  const zacarias_track_vao = createVAO(gl, zacarias_track_vertices, zacarias_track_indices);
+
+  setupState(gl, canvas);
+  setupScene(ff);
+  setupInput();
+
+  state.colorIndex = 2;
+  let last: number | null = null; // set by the first frame, so dt starts at 0
+  function frame(now: number): void {
+    if (last === null) last = now;
+    // rAF pauses in hidden tabs. On return, (now - last) would be huge, so cap dt.
+    const dt = Math.min((now - last) / 1000, MAX_DT);
+    last = now;
+    processInput();
+    update(dt);
+    render(gl, ff, cube_vao, vao, cylinder_vao, arrow_vao, zacarias_track_vao);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+// Page scaffolding: create the canvas and start the cube.
+const canvas = document.createElement('canvas');
+document.getElementById('stage')!.append(canvas);
+run(canvas);
