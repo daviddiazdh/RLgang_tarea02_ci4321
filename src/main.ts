@@ -235,6 +235,7 @@ function processInput(): void {
   if(isJustPressed('KeyR')){
     tank.data.translation[0] = 0; 
     tank_body.data.rotation[1] = 0;
+    tank_turret.data.rotation[0] = - Math.PI / 4;
 
     state.proyectile_shot = false;
     state.proyectile_y = 0;
