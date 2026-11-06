@@ -106,12 +106,10 @@ export function generateSphere(
     let k2 = k1 + sectorCount + 1;
 
     for (let j = 0; j < sectorCount; ++j, ++k1, ++k2) {
-      // Triángulo superior del quad (se omite en el polo superior para evitar bugs)
       if (i !== 0) {
         indexes.push(k1, k2, k1 + 1);
       }
 
-      // Triángulo inferior del quad (se omite en el polo inferior)
       if (i !== stackCount - 1) {
         indexes.push(k1 + 1, k2, k2 + 1);
       }
@@ -155,7 +153,7 @@ export function generateCylinder(
   const halfH = height / 2;
 
   
-  // PARED LATERAL (Vértices + Normales laterales)
+  // PARED LATERAL
   for (let i = 0; i <= stackCount; ++i) {
     const y = halfH - i * stackStep;
 
@@ -165,7 +163,6 @@ export function generateCylinder(
       const x = radius * Math.cos(theta);
       const z = radius * Math.sin(theta);
 
-      // Normal apuntando hacia afuera en el plano XZ
       const nx = Math.cos(theta);
       const ny = 0;
       const nz = Math.sin(theta);
@@ -184,6 +181,7 @@ export function generateCylinder(
     }
   }
 
+  // TAPA SUPERIOR
   const topCenterIndex = vertices.length / 6;
   vertices.push(0, halfH, 0, 0, 1, 0);
 
@@ -219,12 +217,9 @@ export function generateCylinder(
   };
 }
 
-// Exportación lista para usar
 const cylinder = generateCylinder(1, 1, 36, 1);
 export const CYLINDER_VERTICES = cylinder.vertices;
 export const CYLINDER_INDICES = cylinder.indices;
-
-
 
 
 

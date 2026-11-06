@@ -1,5 +1,3 @@
-// Rotating cube, FixedFunction (FF) version.
-//Music
 import bgmFile from '../assets/music/rasputin_shortened.mp3'
 
 import './style.css';
@@ -229,7 +227,7 @@ const state = { angle: 0, colorIndex: 0, rotating: true, moving_x: false, moving
                 proyectile_velocity_z: 0, proyectile_velocity_y : 0, 
                 just_shot: false, proyectile_shot: false, proyectile_z: 0, proyectile_y: 0, 
                 fire_power_index : 0, fire_powers : [7, 10, 15], 
-                moving_camera_x: false, moving_camera_mx: false, moving_camera_y: false, moving_camera_my: false, 
+                moving_camera_x: false, moving_camera_mx: false,
               };
 
 const keysDown = new Set<string>();
@@ -322,9 +320,6 @@ function processInput(): void {
   state.moving_camera_x = isHeld('Numpad6');
   state.moving_camera_mx = isHeld('Numpad4');
 
-  state.moving_camera_y = isHeld('Numpad8');
-  state.moving_camera_my = isHeld('Numpad2');
-
 
   state.rotating_cannon_y = isHeld('ArrowUp');
   state.rotating_cannon_my = isHeld('ArrowDown');
@@ -358,14 +353,6 @@ function update(dt: number): void {
 
   if(state.moving_camera_mx){
     root.data.rotation[1] += (Math.PI / 11) * dt; 
-  }
-
-  if(state.moving_camera_y){
-    root.data.rotation[0] +=  (Math.PI / 11)  * dt; 
-  }
-
-  if(state.moving_camera_my){
-    root.data.rotation[0] -= (Math.PI / 11) * dt; 
   }
 
 
