@@ -95,7 +95,7 @@ const floor = root.addChild('floor', 'object', { color: [0.90, 0.90, 0.90, 1],
 
 // --------- TANK ----
 
-const tank = root.addChild('tank', 'concept', {scale : [1,1,1], rotation : [0, 0, 0], translation : [-5,0.5,2]});
+const tank = root.addChild('tank', 'concept', {scale : [1,1,1], rotation : [0, 0, 0], translation : [-5,0.355,2]});
 
 const tank_body = tank.addChild('tank_body', 'concept', {scale : [1,1,1], rotation : [0,0,0], translation : [0,0,0]});
 
@@ -166,7 +166,7 @@ alien3.addChild('mouth_alien3', 'object', { color : [0,0,0,1], dimensions: [0.2,
 // Game loop.
 // ---------------------------------------------------------------------------
 const POWER_LEVEL_STATES = [[true, false, false], [true, true, false], [true, true, true]];
-const CAMERA_ANGLES = [Math.PI / 4, - Math.PI / 4, 0, Math.PI];
+const CAMERA_ANGLES = [0, Math.PI / 4, - Math.PI / 4, Math.PI];
 const G = 10;
 
 const state = { angle: 0, colorIndex: 0, rotating: true, moving_x: false, moving_mx: false, 
@@ -175,7 +175,9 @@ const state = { angle: 0, colorIndex: 0, rotating: true, moving_x: false, moving
                 camera_index: 0, cannon_angle: Math.PI / 4, shoot_angle: 0, proyectile_velocity: 7,
                 proyectile_velocity_z: 0, proyectile_velocity_y : 0, 
                 just_shot: false, proyectile_shot: false, proyectile_z: 0, proyectile_y: 0, 
-                fire_power_index : 0, fire_powers : [7, 10, 15]};
+                fire_power_index : 0, fire_powers : [7, 10, 15], 
+                moving_camera_x: false, moving_camera_mx: false, moving_camera_y: false, moving_camera_my: false, 
+              };
 
 const keysDown = new Set<string>();
 const keysLastFrame = new Set<string>();
@@ -220,6 +222,8 @@ function processInput(): void {
     state.fire_power_index = 2;
   }
 
+
+
   if(isJustPressed('KeyF')){
     state.fire_power_index = (state.fire_power_index + 1) % 3;
     state.power_state = POWER_LEVEL_STATES[state.fire_power_index];
@@ -240,6 +244,10 @@ function processInput(): void {
     state.proyectile_y = 0;
     state.proyectile_z = 0;
 
+    tank_turret.data.rotation[0] = - Math.PI / 4;
+    state.cannon_angle = Math.PI / 4;
+
+
     state.fire_power_index = 0;
     state.power_state = POWER_LEVEL_STATES[0];
 
@@ -250,6 +258,13 @@ function processInput(): void {
 
   state.moving_x = isHeld('ArrowRight');
   state.moving_mx = isHeld('ArrowLeft');
+
+  state.moving_camera_x = isHeld('Numpad6');
+  state.moving_camera_mx = isHeld('Numpad4');
+
+  state.moving_camera_y = isHeld('Numpad8');
+  state.moving_camera_my = isHeld('Numpad2');
+
 
   state.rotating_cannon_y = isHeld('ArrowUp');
   state.rotating_cannon_my = isHeld('ArrowDown');
@@ -276,6 +291,23 @@ function update(dt: number): void {
     tank.data.translation[0] -= 3 * dt; 
     tank_body.data.rotation[1] = Math.PI / 100;
   }
+
+  if(state.moving_camera_x){
+    root.data.rotation[1] -=  (Math.PI / 11)  * dt; 
+  }
+
+  if(state.moving_camera_mx){
+    root.data.rotation[1] += (Math.PI / 11) * dt; 
+  }
+
+  if(state.moving_camera_y){
+    root.data.rotation[0] +=  (Math.PI / 11)  * dt; 
+  }
+
+  if(state.moving_camera_my){
+    root.data.rotation[0] -= (Math.PI / 11) * dt; 
+  }
+
 
   if(state.rotating_cannon_y && - Math.PI / 2 + (5 / 180) * Math.PI <= tank_turret.data.rotation[0] && tank_turret.data.rotation[0] <= 0){
     tank_turret.data.rotation[0] += state.rotation_angular_velocity * (Math.PI * dt);
