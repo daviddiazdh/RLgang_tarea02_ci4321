@@ -3,7 +3,8 @@
 body { margin: 0; height: 100dvh; width: 100dvw;  display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
 header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; flex-wrap: wrap; }
 h1 { font-size: 18px; margin: 0}
-.hint { opacity: 0.7; color: #101011; }
+.hint { opacity: 0.7; color: #101011; display:flex ; gap: 10px; font-weight: 700; margin-bottom: 2.5px;}
+.group-keys {display: flex; gap: 10px}
 kbd { color: white; background: var(--panel); border: 1px solid #3a4060; border-radius: 4px; padding: 0 6px; font: 12px ui-monospace, monospace; }
 /* main fills the space under the header. #stage is a size container, so cqw/cqh measure it. */
 main { flex: 1; min-height: 0; width: 100%}

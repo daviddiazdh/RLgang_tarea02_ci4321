@@ -1,4 +1,7 @@
 // Rotating cube, FixedFunction (FF) version.
+//Music
+import bgmFile from '../assets/music/rasputin_shortened.mp3'
+
 import './style.css';
 import { mat3, mat4, vec3 } from 'gl-matrix';
 import { ATTRIB, createFixedFunction, LIGHTING } from './vendor/ff/ff';
@@ -20,6 +23,36 @@ import {
   STRIDE_BYTES,
 } from './constants';
 import { TreeNode } from './treenode';
+
+//MUSIC
+const bgm = new Audio(bgmFile);
+bgm.loop = true;
+bgm.volume = 0.05;
+const cannon_audio = new Audio ('../assets/music/cannon_sfx_shortened.mp3');
+cannon_audio.loop = false;
+cannon_audio.volume = 0.4;
+const alien_dying_audio = new Audio ('../assets/music/alien_dying.mp3');
+alien_dying_audio.loop = false;
+alien_dying_audio.volume = 0.4;
+
+function initAudioOnUserInteraction(): void {
+  const startAudio = () => {
+    bgm.play().then(() => {
+      // Audio iniciado correctamente
+      window.removeEventListener('keydown', startAudio);
+      window.removeEventListener('click', startAudio);
+    }).catch((err) => {
+      console.warn('El reproductor fue bloqueado:', err);
+    });
+  };
+
+  window.addEventListener('keydown', startAudio);
+  window.addEventListener('click', startAudio);
+}
+
+// Llamar al arrancar la app
+initAudioOnUserInteraction();
+
 
 type FF = ReturnType<typeof createFixedFunction>;
 
@@ -147,7 +180,7 @@ alien1.addChild('mouth_alien1', 'object', { color : [0,0,0,1], dimensions: [0.2,
 
 // --------- ALIEN 2 ----
 
-const alien2 = root.addChild('alien2', 'concept', {scale : [0.7,0.7,0.7], rotation : [0, 0, 0], translation : [3,4,-2.5]}, "", false);
+const alien2 = root.addChild('alien2', 'concept', {scale : [0.7,0.7,0.7], rotation : [0, 0, 0], translation : [3,4,-8]}, "", false);
 const head_alien2 = alien2.addChild('head_alien2', 'object', { color : [0,0.8,0,1], dimensions: [0.8, 0.8, 0.8], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]}, "SPHERE");
 alien2.addChild('left_eye_alien2', 'object', { color : [0,0,0,1], dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, Math.PI / 4], scale: [1, 1, 1], translation: [-0.35,0.35,0.8], position: [0,0,0]}, "SPHERE");
 alien2.addChild('right_eye_alien2', 'object', { color : [0,0,0,1], dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, -Math.PI / 4], scale: [1, 1, 1], translation: [0.35,0.35,0.8], position: [0,0,0]}, "SPHERE");
@@ -161,6 +194,26 @@ alien3.addChild('left_eye_alien3', 'object', { color : [0,0,0,1], dimensions: [0
 alien3.addChild('right_eye_alien3', 'object', { color : [0,0,0,1], dimensions: [0.2, 0.35, 0.1], rotation: [0, 0, -Math.PI / 4], scale: [1, 1, 1], translation: [0.35,0.35,0.8], position: [0,0,0]}, "SPHERE");
 alien3.addChild('mouth_alien3', 'object', { color : [0,0,0,1], dimensions: [0.2, 0.1, 0.2], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,-0.2,0.8], position: [0,0,0]}, "SPHERE");
 
+// --------- RUSSIAN FLAG ----
+
+
+
+const flag = root.addChild('flag', 'concept', {scale : [1,1,1], rotation : [0, 0, 0], translation : [-10,2.5,-12]}, "", false);
+const pole = flag.addChild('pole', 'object', { color: [70 / 255, 70 / 255, 70 / 255, 1],
+  dimensions: [0.15, 5, 0.15], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [0,0,0], position: [0,0,0]}, 
+  "CYLINDER" );
+const white_stripe = flag.addChild('white_stripe', 'object', { color: [1, 1, 1, 1],
+  dimensions: [2, 0.5, 0.15], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [1.15,2.25,0], position: [0,0,0]}, 
+  "CUBE")
+const blue_stripe = flag.addChild('blue_stripe', 'object', { color: [0, 54 / 255, 167 / 255, 1],
+dimensions: [2, 0.5, 0.15], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [1.15,1.75,0], position: [0,0,0]}, 
+"CUBE")  
+const red_stripe = flag.addChild('red_stripe', 'object', { color: [214 / 255, 39 / 255, 24 / 255, 1],
+  dimensions: [2, 0.5, 0.15], rotation: [0, 0, 0], scale: [1, 1, 1], translation: [1.15,1.25,0], position: [0,0,0]}, 
+  "CUBE")
+
+
+
 
 // ---------------------------------------------------------------------------
 // Game loop.
@@ -171,7 +224,7 @@ const G = 10;
 
 const state = { angle: 0, colorIndex: 0, rotating: true, moving_x: false, moving_mx: false, 
                 tank_x_position: 0, power_state: [true,false,false],
-                rotating_cannon_y: false, rotating_cannon_my : false, rotation_angular_velocity: 1.25,
+                rotating_cannon_y: false, rotating_cannon_my : false, rotation_angular_velocity: 0.50,
                 camera_index: 0, cannon_angle: Math.PI / 4, shoot_angle: 0, proyectile_velocity: 7,
                 proyectile_velocity_z: 0, proyectile_velocity_y : 0, 
                 just_shot: false, proyectile_shot: false, proyectile_z: 0, proyectile_y: 0, 
@@ -204,7 +257,13 @@ function isHeld(code: string): boolean {
 function processInput(): void {
   if (isJustPressed('Space') && !state.proyectile_shot) {
     state.just_shot = true;
-    state.proyectile_shot = true;  
+    state.proyectile_shot = true;      
+
+    cannon_audio.play();
+  }
+
+  if (isJustPressed('KeyM')){
+    bgm.volume = (bgm.volume == 0 ) ? 0.05 : 0.0;
   }
 
   if (isJustPressed('Digit1')){
@@ -354,6 +413,10 @@ function update(dt: number): void {
       
       if(left_term < right_term){
         heads_concept[i].disabled = true;
+        state.proyectile_shot = false;
+        state.proyectile_y = 0;
+        state.proyectile_z = 0;
+        alien_dying_audio.play();
       }
     }
   }

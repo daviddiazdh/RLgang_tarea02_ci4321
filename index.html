@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rotating Cube (FF)</title>
+    <title>Zacarias' Russian Tank Hero</title>
   </head>
   <body>
     <!-- <header>
@@ -12,10 +12,20 @@
     </header> -->
     <main>
       <div id="div-controls">
-        <span class="hint"> <kbd>←</kbd><kbd>→</kbd> move <kbd>↑</kbd><kbd>↓</kbd> angle <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> strength <kbd>Space</kbd> fire <kbd>R</kbd> reset <kbd>C</kbd> camera </span>
+        <span class="hint"> 
+          <span class="group-keys"><div style="display: flex;"><kbd>←</kbd><kbd>→</kbd></div></span> move 
+            <span class="group-keys"><div style="display: flex;"><kbd>↑</kbd><kbd>↓</kbd></div></span> angle 
+            <span class="group-keys"><div style="display:flex"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div></span> strength
+            <span class="group-keys"><div style="display:flex"><kbd>F</kbd></div></span> toggle strength 
+            <span class="group-keys"><div style="display:flex"><kbd>Space</kbd></div></span> fire 
+            <span class="group-keys"><div style="display:flex"><kbd>R</kbd></div></span> reset 
+            <span class="group-keys"><div style="display:flex"><kbd>C</kbd></div></span> camera
+            <span class="group-keys"><div style="display:flex"><kbd>M</kbd></div></span> toggle music 
+          </span>
       </div>
       <div id="stage"></div>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/main.ts">
+    </script>
   </body>
 </html>
